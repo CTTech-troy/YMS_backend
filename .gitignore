@@ -13,7 +13,7 @@ dist-ssr
 *.local
 
 # Config / Secrets
-src/config/YMSDB.json
+# src/config/YMSDB.json
 
 # Editor directories and files
 .vscode/*
