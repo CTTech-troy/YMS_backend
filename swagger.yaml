@@ -1,0 +1,171 @@
+openapi: 3.0.0
+info:
+  title: School Management System API
+  description: API documentation for the School Management System
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000
+paths:
+  /auth/login:
+    post:
+      summary: Login a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Successful login
+        '401':
+          description: Unauthorized
+  /auth/register:
+    post:
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          description: Bad request
+  /users:
+    get:
+      summary: Get all users
+      responses:
+        '200':
+          description: A list of users
+    post:
+      summary: Create a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '201':
+          description: User created successfully
+  /classes:
+    get:
+      summary: Get all classes
+      responses:
+        '200':
+          description: A list of classes
+    post:
+      summary: Create a new class
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        '201':
+          description: Class created successfully
+  /subjects:
+    get:
+      summary: Get all subjects
+      responses:
+        '200':
+          description: A list of subjects
+    post:
+      summary: Create a new subject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        '201':
+          description: Subject created successfully
+  /results:
+    get:
+      summary: Get all results
+      responses:
+        '200':
+          description: A list of results
+    post:
+      summary: Create a new result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                studentId:
+                  type: string
+                subjectId:
+                  type: string
+                score:
+                  type: number
+      responses:
+        '201':
+          description: Result created successfully
+  /attendance:
+    get:
+      summary: Get attendance records
+      responses:
+        '200':
+          description: A list of attendance records
+    post:
+      summary: Mark attendance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                studentId:
+                  type: string
+                date:
+                  type: string
+                  format: date
+                status:
+                  type: string
+                  enum: [present, absent]
+      responses:
+        '201':
+          description: Attendance marked successfully
+  /reports:
+    get:
+      summary: Generate reports
+      responses:
+        '200':
+          description: A report generated successfully
