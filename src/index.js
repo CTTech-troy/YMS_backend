@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import dotenv from "dotenv";
 
 import teacherRoutes from "./routes/teacher.routes.js";
 import subjectsRoutes from "./routes/subjects.routes.js";
@@ -11,10 +12,11 @@ import attendanceRoutes from "./routes/attendance.routes.js";
 import resultsRoutes from './routes/results.routes.js';
 
 const app = express();
+dotenv.config();
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173', // Vite default
+  origin: process.env.FRONTEND_URL, 
   credentials: true
 }));
 app.use(express.json({ limit: "12mb" }));
@@ -50,3 +52,4 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
 });
+

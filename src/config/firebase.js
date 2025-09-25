@@ -3,13 +3,18 @@ import admin from "firebase-admin";
 import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+
 let serviceAccount;
 
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+
+if (process.env.NODE_ENV==="production") {
   // Load from .env
   serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
@@ -18,7 +23,6 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   const serviceAccountPath = path.join(__dirname, "./YMSDB.json");
   serviceAccount = JSON.parse(readFileSync(serviceAccountPath, "utf8"));
 }
-
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -27,3 +31,4 @@ const db = admin.firestore();
 const auth = admin.auth();
 
 export { admin, db, auth };
+ 
