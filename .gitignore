@@ -14,6 +14,7 @@ dist-ssr
 
 # Config / Secrets
 src/config/YMSDB.json
+.env
 
 # Editor directories and files
 .vscode/*
