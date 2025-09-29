@@ -112,7 +112,15 @@ export const updateResult = async (req, res) => {
 export const deleteResult = async (req, res) => {
   try {
     const id = req.params.id;
-    await db.collection('results').doc(id).delete();
+    if (!id) return res.status(400).json({ message: 'Result id required' });
+
+    const docRef = db.collection('results').doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) {
+      return res.status(404).json({ message: 'Result not found' });
+    }
+
+    await docRef.delete();
     return res.status(200).json({ message: 'Result deleted' });
   } catch (err) {
     console.error('deleteResult error:', err);

@@ -79,6 +79,20 @@ async function resolveSubjects(subjectList = []) {
 }
 
 /**
+ * Parse a data URL or picture object into { mime, data } (base64)
+ */
+function parsePictureInput(p) {
+  if (!p) return null;
+  if (typeof p === "object" && p.mime && p.data) return { mime: p.mime, data: p.data };
+  if (typeof p === "string") {
+    // data:[mime];base64,[data]
+    const m = p.match(/^data:(.+);base64,(.*)$/);
+    if (m) return { mime: m[1], data: m[2] };
+  }
+  return null;
+}
+
+/**
  * Create Student
  */
 async function createStudent(req, res) {
@@ -106,6 +120,10 @@ async function createStudent(req, res) {
 
     const subjects = await resolveSubjects(body.subjects || []);
 
+    // parse picture into { mime, data } and store base64 data (or empty string)
+    const pictureObj = parsePictureInput(body.picture);
+    const pictureToStore = pictureObj ? pictureObj : "";
+
     const studentData = {
       name: body.name || "",
       uid,
@@ -118,7 +136,8 @@ async function createStudent(req, res) {
       address: body.address || "",
       stateOfOrigin: body.stateOfOrigin || "",
       lga: body.lga || "",
-      picture: body.picture || "",
+      // store as object { mime, data } (data is base64)
+      picture: pictureToStore,
       bloodGroup: body.bloodGroup || "",
       allergies: body.allergies || "",
       medicalConditions: body.medicalConditions || "",
@@ -262,6 +281,12 @@ async function updateStudent(req, res) {
       const r = normalizeReligion(body.religion);
       if (r === null) return res.status(400).json({ error: "Invalid religion" });
       body.religion = r;
+    }
+
+    // parse picture if provided (accept data URL or {mime,data})
+    if (body.picture !== undefined) {
+      const pic = parsePictureInput(body.picture);
+      body.picture = pic ? pic : ""; // store object or empty string
     }
 
     const allowed = [
