@@ -1,5 +1,5 @@
 import express from "express";
-import cors from "cors";
+import createCorsMiddleware from "./middleware/cors.js";
 import dotenv from "dotenv";
 
 import teacherRoutes from "./routes/teacher.routes.js";
@@ -14,11 +14,7 @@ import resultsRoutes from './routes/results.routes.js';
 const app = express();
 dotenv.config();
 
-// Middleware
-app.use(cors({
-  origin: process.env.FRONTEND_URL, 
-  credentials: true
-}));
+app.use(createCorsMiddleware());
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true }));
 
