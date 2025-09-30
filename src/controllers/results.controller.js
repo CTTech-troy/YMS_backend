@@ -1,12 +1,12 @@
 import { db } from '../firebase.js';
-import axios from 'axios';
+// removed axios import to use global fetch instead
 
 
 export const createResult = async (req, res) => {
   try {
+    // accept common property names from the client
     const {
       studentId,
-      studentuid,
       studentUid,
       studentName,
       picture,
@@ -18,25 +18,28 @@ export const createResult = async (req, res) => {
       teacherUid
     } = req.body;
 
-    // resolve possible student UID variants sent from frontend
-    const resolvedStudentUid = studentUid || studentuid || req.body.studdentUid || null;
+    // also allow alternate field names that might be sent
+    const resolvedStudentUid = studentUid || req.body.studentuid || req.body.Uid || null;
+    const resolvedStudentName = studentName || req.body.Name || null;
+    const finalStudentId = studentId || req.body.studentid || req.body.id || null;
 
-    if (!studentId || !teacherUid || !session || !term || !Array.isArray(subjects) || subjects.length === 0) {
+    if (!finalStudentId || !teacherUid || !session || !term || !Array.isArray(subjects) || subjects.length === 0) {
       return res.status(400).json({ message: 'Missing required fields: studentId, teacherUid, session, term, subjects' });
     }
 
     // Try to get student info from the student API (if available)
-    // Set STUDENT_API_URL in env (e.g. "http://localhost:3000/api/students") or it will default to the localhost path
-    const studentApiBase = process.env.STUDENT_API_URL || 'http://localhost:3000/api/students';
+    const studentApiBase = process.env.STUDENT_API_URL || 'https://yms-backend-a2x4.onrender.com/api/students';
     let apiStudentName = null;
     let apiStudentUid = null;
     try {
-      const url = `${studentApiBase}/${encodeURIComponent(studentId)}`;
-      const resp = await axios.get(url);
-      if (resp && resp.data) {
-        // accommodate common field names from different student APIs
-        apiStudentName = resp.data.name || resp.data.studentName || resp.data.fullName || null;
-        apiStudentUid = resp.data.uid || resp.data.studentUid || resp.data.userId || null;
+      const url = `${studentApiBase}/${encodeURIComponent(finalStudentId)}`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const data = await resp.json();
+        apiStudentName = data?.name || data?.studentName || data?.fullName || null;
+        apiStudentUid = data?.uid || data?.studentUid || data?.userId || null;
+      } else {
+        console.warn(`createResult: student API returned status ${resp.status} for ${url}`);
       }
     } catch (fetchErr) {
       // don't fail the whole request if the student API is unavailable — just log and continue
@@ -44,11 +47,11 @@ export const createResult = async (req, res) => {
     }
 
     // Prefer student info from the student API, fallback to request body or resolved UID
-    const finalStudentName = apiStudentName || studentName || null;
+    const finalStudentName = apiStudentName || resolvedStudentName || null;
     const finalStudentUid = apiStudentUid || resolvedStudentUid || null;
 
     const resultData = {
-      studentId,
+      studentId: finalStudentId,
       // include resolved student info when available
       ...(finalStudentName ? { studentName: String(finalStudentName) } : {}),
       ...(picture ? { picture: String(picture) } : {}),
