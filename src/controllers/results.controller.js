@@ -1,16 +1,6 @@
 import { db } from '../firebase.js';
+import axios from 'axios';
 
-/**
- * Results controller using Firebase Admin SDK (admin.firestore()).
- * Exports:
- *  - createResult
- *  - getAllResults
- *  - getResultById
- *  - updateResult
- *  - deleteResult
- *  - publishResult
- *  - checkResult
- */
 
 export const createResult = async (req, res) => {
   try {
@@ -18,10 +8,13 @@ export const createResult = async (req, res) => {
       studentId,
       studentuid,
       studentUid,
+      studentName,
+      picture,
       session,
       term,
       subjects,
       teacherComment = '',
+      principalComment = '',
       teacherUid
     } = req.body;
 
@@ -32,12 +25,38 @@ export const createResult = async (req, res) => {
       return res.status(400).json({ message: 'Missing required fields: studentId, teacherUid, session, term, subjects' });
     }
 
+    // Try to get student info from the student API (if available)
+    // Set STUDENT_API_URL in env (e.g. "http://localhost:3000/api/students") or it will default to the localhost path
+    const studentApiBase = process.env.STUDENT_API_URL || 'http://localhost:3000/api/students';
+    let apiStudentName = null;
+    let apiStudentUid = null;
+    try {
+      const url = `${studentApiBase}/${encodeURIComponent(studentId)}`;
+      const resp = await axios.get(url);
+      if (resp && resp.data) {
+        // accommodate common field names from different student APIs
+        apiStudentName = resp.data.name || resp.data.studentName || resp.data.fullName || null;
+        apiStudentUid = resp.data.uid || resp.data.studentUid || resp.data.userId || null;
+      }
+    } catch (fetchErr) {
+      // don't fail the whole request if the student API is unavailable — just log and continue
+      console.warn('createResult: failed to fetch student info from student API:', fetchErr.message || fetchErr);
+    }
+
+    // Prefer student info from the student API, fallback to request body or resolved UID
+    const finalStudentName = apiStudentName || studentName || null;
+    const finalStudentUid = apiStudentUid || resolvedStudentUid || null;
+
     const resultData = {
       studentId,
+      // include resolved student info when available
+      ...(finalStudentName ? { studentName: String(finalStudentName) } : {}),
+      ...(picture ? { picture: String(picture) } : {}),
       session,
       term,
       subjects,
       teacherComment,
+      principalComment,
       teacherUid,
       commentStatus: String(teacherComment).trim() !== '',
       published: 'no',
@@ -45,8 +64,8 @@ export const createResult = async (req, res) => {
     };
 
     // Only include studentUid when we have a value (avoid undefined Firestore error)
-    if (resolvedStudentUid) {
-      resultData.studentUid = String(resolvedStudentUid);
+    if (finalStudentUid) {
+      resultData.studentUid = String(finalStudentUid);
     }
 
     const docRef = await db.collection('results').add(resultData);

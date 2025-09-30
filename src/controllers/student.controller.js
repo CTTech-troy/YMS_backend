@@ -327,5 +327,84 @@ async function deleteStudent(req, res) {
   }
 }
 
+// Promotion map: normalized class name (no spaces, lowercased) -> next class label.
+// Add or adjust entries to match your app's class naming.
+const promotionMap = {
+  'creche': 'KG 1',
+  'kg1': 'KG 2',
+  'kg2': 'Nursery 1',
+  'nursery1': 'Nursery 2',
+  'nursery2': 'Primary 1',
+  'primary1': 'Primary 2',
+  'primary2': 'Primary 3',
+  'primary3': 'Primary 4',
+  'primary4': 'Primary 5',
+  'primary5': 'Primary 6',
+  'primary6': 'JSS1',
+  // legacy / alternative naming (BasicX)
+  'basic1': 'Basic2',
+  'basic2': 'Basic3',
+  'basic3': 'Basic4',
+  'basic4': 'Basic5',
+  'basic5': 'Basic6',
+  'basic6': 'Graduated',
+  // Junior/Senior
+  'jss1': 'JSS2',
+  'jss2': 'JSS3',
+  'jss3': 'SS1',
+  'ss1': 'SS2',
+  'ss2': 'SS3',
+  'ss3': 'Graduated'
+};
+
+function normalizeClassName(s) {
+  if (!s) return '';
+  return String(s).replace(/\s+/g, '').toLowerCase();
+}
+
+/**
+ * Promote all students to the next class according to promotionMap.
+ * Students with no mapped next class are left unchanged.
+ */
+async function promoteStudents(req, res) {
+  try {
+    const snap = await db.collection('students').get();
+    if (snap.empty) return res.json({ success: true, data: [] });
+
+    const batch = db.batch();
+    const updates = [];
+
+    for (const doc of snap.docs) {
+      const data = doc.data() || {};
+      const currentClass = data.class || data.className || '';
+      const norm = normalizeClassName(currentClass);
+
+      const nextClass = promotionMap[norm] || null;
+
+      // If there's no mapping, skip (leave unchanged)
+      if (!nextClass) {
+        updates.push({ id: doc.id, ...data, class: currentClass });
+        continue;
+      }
+
+      // Only update when class actually changes
+      if (nextClass !== currentClass) {
+        const ref = db.collection('students').doc(doc.id);
+        batch.update(ref, { class: nextClass, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      }
+
+      updates.push({ id: doc.id, ...data, class: nextClass });
+    }
+
+    // commit updates (beware of 500-op batch limit for very large collections)
+    await batch.commit();
+
+    return res.json({ success: true, data: updates });
+  } catch (err) {
+    console.error('promoteStudents error', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
 // ✅ Use ESM export instead of module.exports
-export { createStudent, getStudent, listStudents, addResult, updateStudent, deleteStudent };
+export { createStudent, getStudent, listStudents, addResult, updateStudent, deleteStudent, promoteStudents };
