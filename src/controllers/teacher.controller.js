@@ -7,7 +7,7 @@ function generateTeacherUID(existingUIDs = []) {
   const yearShort = String(new Date().getFullYear()).slice(-2);
   const seqs = existingUIDs
     .filter(uid => uid && uid.startsWith(`YMS-S-${yearShort}`))
-    .map(uid => {
+    .map(uid => { 
       const m = uid.match(/(\d{2})$/);
       return m ? parseInt(m[1], 10) : 0;
     });
