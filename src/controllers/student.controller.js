@@ -156,7 +156,7 @@ async function createStudent(req, res) {
     await ref.update({ id: ref.id });
 
     // return the created document data (so frontend can append/mapping)
-    const doc = await ref.get();
+    const doc =  await ref.get();
     return res.status(201).json({ success: true, data: { id: doc.id, ...doc.data() } });
   } catch (err) {
     console.error(err);
@@ -184,8 +184,21 @@ async function getStudent(req, res) {
  */
 async function listStudents(req, res) {
   try {
-    const snap = await db.collection("students").orderBy("createdAt", "desc").get();
-    const students = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const snapshot = await db.collection("students").get();
+    if (snapshot.empty) return res.json({ success: true, data: [] });
+
+    const students = snapshot.docs
+      .map(doc => {
+        const data = doc.data() || {};
+        const createdAtMs =
+          data.createdAt && typeof data.createdAt.toMillis === "function"
+            ? data.createdAt.toMillis()
+            : (data.createdAt || 0);
+        return { id: doc.id, ...data, _createdAtMs: createdAtMs };
+      })
+      .sort((a, b) => b._createdAtMs - a._createdAtMs)
+      .map(({ _createdAtMs, ...rest }) => rest);
+
     return res.json({ success: true, data: students });
   } catch (err) {
     console.error(err);

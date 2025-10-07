@@ -1,8 +1,9 @@
 import cors from "cors";
 
 const DEFAULT_ORIGINS = [
-  "http://localhost:5173",      // vite dev
-  "http://localhost:3000",
+  "http://localhost:5174",      // vite dev
+  "http://localhost:5173",
+  "http://localhost:5000",
   "https://ymsdashboard.netlify.app", 
   "https://your-frontend-domain.com"  // add your real prod domain(s)
 ];

@@ -14,13 +14,14 @@ try {
   throw new Error("Invalid FIREBASE_SERVICE_ACCOUNT. Must be valid JSON.");
 }
 
-// Fix private key newlines if stored as escaped in .env
 if (serviceAccount.private_key) {
   serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
 }
 
+// Initialize Admin SDK with credential only (no RTDB initialization)
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
+  // removed databaseURL to avoid RTDB usage
 });
 
 const db = admin.firestore();
