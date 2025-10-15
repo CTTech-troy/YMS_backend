@@ -184,22 +184,27 @@ async function getStudent(req, res) {
  */
 async function listStudents(req, res) {
   try {
-    const snapshot = await db.collection("students").get();
-    if (snapshot.empty) return res.json({ success: true, data: [] });
+    let q = db.collection("students").orderBy("createdAt", "desc");
 
-    const students = snapshot.docs
-      .map(doc => {
-        const data = doc.data() || {};
-        const createdAtMs =
-          data.createdAt && typeof data.createdAt.toMillis === "function"
-            ? data.createdAt.toMillis()
-            : (data.createdAt || 0);
-        return { id: doc.id, ...data, _createdAtMs: createdAtMs };
-      })
-      .sort((a, b) => b._createdAtMs - a._createdAtMs)
-      .map(({ _createdAtMs, ...rest }) => rest);
+    // startAfter accepts a document snapshot; support passing a docId
+    const startAfterId = req.query.startAfter;
+    if (startAfterId) {
+      try {
+        const startDoc = await db.collection("students").doc(String(startAfterId)).get();
+        if (startDoc.exists) q = q.startAfter(startDoc);
+      } catch (e) {
+        // ignore invalid startAfter, fallback to first page
+        console.warn('Invalid startAfter token, serving first page', e);
+      }
+    }
 
-    return res.json({ success: true, data: students });
+    const snapshot = await q.get();
+    if (snapshot.empty) return res.json({ success: true, data: [], nextPageToken: null });
+
+    const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1];
+    // return a nextPageToken (doc id) the client can use as ?startAfter=<token>
+    return res.json({ success: true, data: students, nextPageToken: lastDoc ? lastDoc.id : null });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });

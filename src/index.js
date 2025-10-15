@@ -19,8 +19,8 @@ dotenv.config();
 
 app.use(cors());
 app.use(createCorsMiddleware());
-app.use(express.json({ limit: "12mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "250mb" }));
+app.use(express.urlencoded({ limit: '300mb', extended: true }));
 
 // Root route
 app.get("/", (req, res) => {

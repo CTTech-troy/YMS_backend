@@ -110,6 +110,50 @@ export const TeacherController = {
     }
   },
 
+  // New: disable teacher account and create a notification
+  async disableTeacher(req, res) {
+    try {
+      const id = req.params.id;
+      if (!id) return res.status(400).json({ error: 'Missing teacher id' });
+
+      // Update teacher status to inactive (use your model's update method)
+      const updated = await TeacherModel.updateById(id, { status: 'inactive' });
+      if (!updated) return res.status(404).json({ error: 'Teacher not found' });
+
+      // create a notification for the teacher if NotificationModel exists
+      try {
+        if (typeof NotificationModel !== 'undefined' && NotificationModel.create) {
+          await NotificationModel.create({
+            to: updated.uid || updated.id,
+            title: 'Account disabled',
+            message: 'Your account has been disabled. Contact the admin to restore access.',
+            createdAt: new Date(),
+            meta: { reason: req.body.reason || 'disabled by admin' },
+            read: false
+          });
+        } else {
+          // fallback: if no NotificationModel, persist to teacher.notifications array if available
+          if (updated.notifications && Array.isArray(updated.notifications)) {
+            updated.notifications.push({
+              title: 'Account disabled',
+              message: 'Your account has been disabled. Contact the admin to restore access.',
+              createdAt: new Date(),
+              read: false
+            });
+            await TeacherModel.updateById(id, { notifications: updated.notifications });
+          }
+        }
+      } catch (nErr) {
+        console.warn('Failed to create notification for disabled teacher', nErr);
+      }
+
+      return res.json({ success: true, teacher: updated });
+    } catch (error) {
+      console.error('disableTeacher error', error);
+      return res.status(500).json({ error: 'Failed to disable teacher' });
+    }
+  },
+
   // New: return a single teacher by DB id or by UID/staffId
   async getTeacher(req, res) {
     try {
