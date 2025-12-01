@@ -69,6 +69,6 @@ app.use((err, req, res, next) => {
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on https://yms-backend-a2x4.onrender.com/`);
+  console.log(`🚀 Server is running and in good condition`);
 });
 

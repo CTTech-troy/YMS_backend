@@ -1,7 +1,6 @@
 import { db } from '../firebase.js';
 // removed axios import to use global fetch instead
 
-
 export const createResult = async (req, res) => {
   try {
     // accept common property names from the client
@@ -27,33 +26,63 @@ export const createResult = async (req, res) => {
       return res.status(400).json({ message: 'Missing required fields: studentId, teacherUid, session, term, subjects' });
     }
 
-    // Try to get student info from the student API (if available)
-    const studentApiBase = process.env.STUDENT_API_URL || 'https://yms-backend-a2x4.onrender.com/api/students';
+    // declare vars to collect student info
     let apiStudentName = null;
     let apiStudentUid = null;
+    let apiStudentClass = null;
+
+    // ========================================
+    // TRY FIRESTORE STUDENT DOC FIRST (fallback for name/class/uid)
+    // ========================================
+    const studentRef = db.collection('students').doc(finalStudentId);
+    let firestoreStudentSnap = null;
+    try {
+      firestoreStudentSnap = await studentRef.get();
+      if (firestoreStudentSnap.exists) {
+        const s = firestoreStudentSnap.data() || {};
+        apiStudentName = apiStudentName || s.name || s.fullName || s.studentName || null;
+        apiStudentUid = apiStudentUid || s.uid || s.studentUid || null;
+        apiStudentClass = apiStudentClass || s.class || s.studentClass || s.className || null;
+      }
+    } catch (e) {
+      console.debug('createResult: failed to read student from Firestore (non-fatal)', e?.message || e);
+    }
+
+    // ========================================
+    // FETCH STUDENT DATA FROM STUDENT API (if still missing)
+    // ========================================
+    const studentApiBase = process.env.STUDENT_API_URL || 'https://yms-backend-a2x4.onrender.com/api/students';
     try {
       const url = `${studentApiBase}/${encodeURIComponent(finalStudentId)}`;
       const resp = await fetch(url);
       if (resp.ok) {
-        const data = await resp.json();
-        apiStudentName = data?.name || data?.studentName || data?.fullName || null;
-        apiStudentUid = data?.uid || data?.studentUid || data?.userId || null;
+        const json = await resp.json();
+        const data = json?.data ?? json; // support { data: {...} } and direct payload
+        apiStudentName = apiStudentName || data?.name || data?.studentName || data?.fullName || null;
+        apiStudentUid = apiStudentUid || data?.uid || data?.studentUid || data?.userId || null;
+        apiStudentClass = apiStudentClass || data?.class || data?.studentClass || data?.className || data?.grade || data?.classroom || null;
       } else {
         console.warn(`createResult: student API returned status ${resp.status} for ${url}`);
       }
     } catch (fetchErr) {
-      // don't fail the whole request if the student API is unavailable — just log and continue
-      console.warn('createResult: failed to fetch student info from student API:', fetchErr.message || fetchErr);
+      console.warn('createResult: failed to fetch student info from student API:', fetchErr?.message || fetchErr);
     }
 
-    // Prefer student info from the student API, fallback to request body or resolved UID
+    // ========================================
+    // RESOLVE FINAL VALUES (prefer Firestore/API data, fallback to request body)
+    // ========================================
     const finalStudentName = apiStudentName || resolvedStudentName || null;
     const finalStudentUid = apiStudentUid || resolvedStudentUid || null;
+    const finalStudentClass = apiStudentClass || null;
 
+    // ========================================
+    // BUILD RESULT DOCUMENT
+    // ========================================
     const resultData = {
       studentId: finalStudentId,
-      // include resolved student info when available
       ...(finalStudentName ? { studentName: String(finalStudentName) } : {}),
+      ...(finalStudentUid ? { studentUid: String(finalStudentUid) } : {}),
+      ...(finalStudentClass ? { studentClass: String(finalStudentClass) } : {}),
       ...(picture ? { picture: String(picture) } : {}),
       session,
       term,
@@ -66,14 +95,56 @@ export const createResult = async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    // Only include studentUid when we have a value (avoid undefined Firestore error)
-    if (finalStudentUid) {
-      resultData.studentUid = String(finalStudentUid);
-    }
-
+    // Save to Firestore
     const docRef = await db.collection('results').add(resultData);
     const snap = await docRef.get();
-    return res.status(201).json({ id: docRef.id, ...snap.data() });
+    const resultId = docRef.id;
+    const resultDoc = snap.data();
+
+    // ========================================
+    // UPDATE STUDENT DOCUMENT WITH RESULT REF (and merge missing name/uid/class)
+    // ========================================
+    try {
+      const studentSnap = firestoreStudentSnap || (await studentRef.get());
+      if (studentSnap.exists) {
+        const studentData = studentSnap.data() || {};
+        const results = studentData.results || {};
+        const resultKey = `${session}_${term}`;
+
+        results[resultKey] = {
+          id: resultId,
+          createdAt: new Date().toISOString(),
+          session,
+          term,
+          subjectCount: subjects.length
+        };
+
+        // Only add name/uid/class to student doc if missing to avoid overwriting authoritative data
+        const studentUpdate = {
+          results,
+          lastResultSession: session,
+          lastResultTerm: term,
+          lastResultAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        if (finalStudentName && !studentData.name) studentUpdate.name = finalStudentName;
+        if (finalStudentUid && !studentData.uid) studentUpdate.uid = finalStudentUid;
+        if (finalStudentClass && !studentData.class) studentUpdate.class = finalStudentClass;
+
+        await studentRef.update(studentUpdate);
+        console.debug(`createResult: updated student ${finalStudentId} with result ref`, { resultKey, resultId });
+      } else {
+        console.warn(`createResult: student document ${finalStudentId} not found, result created but not linked`);
+      }
+    } catch (e) {
+      console.warn('createResult: failed to update student document with result ref (non-fatal)', e?.message || e);
+    }
+
+    return res.status(201).json({
+      id: resultId,
+      ...resultDoc,
+      linkedToStudent: true
+    });
   } catch (err) {
     console.error('createResult error:', err);
     return res.status(500).json({ message: err.message || 'Failed to create result' });
@@ -140,6 +211,34 @@ export const deleteResult = async (req, res) => {
     const snap = await docRef.get();
     if (!snap.exists) {
       return res.status(404).json({ message: 'Result not found' });
+    }
+
+    const resultData = snap.data();
+    const studentId = resultData?.studentId;
+    const session = resultData?.session;
+    const term = resultData?.term;
+
+    // ========================================
+    // REMOVE RESULT REFERENCE FROM STUDENT
+    // ========================================
+    /**
+     * When deleting a result, also remove its reference from the student's results field
+     */
+    if (studentId && session && term) {
+      const studentRef = db.collection('students').doc(studentId);
+      const studentSnap = await studentRef.get();
+      
+      if (studentSnap.exists) {
+        const studentData = studentSnap.data() || {};
+        const results = studentData.results || {};
+        const resultKey = `${session}_${term}`;
+        
+        // Remove the result reference
+        delete results[resultKey];
+        
+        await studentRef.update({ results });
+        console.debug(`deleteResult: removed result ref from student ${studentId}`);
+      }
     }
 
     await docRef.delete();

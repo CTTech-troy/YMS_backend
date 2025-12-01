@@ -180,33 +180,82 @@ async function getStudent(req, res) {
 }
 
 /**
- * List Students
+ * List Students (paginated 10 per page by default)
+ * Query params:
+ *   - limit (optional, max 100)
+ *   - startAfter (optional, doc id to start after for cursor pagination)
+ * 
+ * Returns:
+ *   - data: array of students in current page
+ *   - count: number of students in current page
+ *   - nextPageToken: cursor for next page
+ *   - hasMore: whether more pages exist
  */
 async function listStudents(req, res) {
   try {
-    let q = db.collection("students").orderBy("createdAt", "desc");
+    // default page size 10
+    const limit = Math.min(Number(req.query.limit) || 10, 100);
+    const startAfterId = req.query.startAfter ? String(req.query.startAfter) : null;
 
-    // startAfter accepts a document snapshot; support passing a docId
-    const startAfterId = req.query.startAfter;
+    // build base query ordered by creation date
+    let query = db.collection("students").orderBy("createdAt", "desc");
+
+    // ========================================
+    // APPLY CURSOR FOR PAGINATION
+    // ========================================
     if (startAfterId) {
       try {
-        const startDoc = await db.collection("students").doc(String(startAfterId)).get();
-        if (startDoc.exists) q = q.startAfter(startDoc);
+        const startDoc = await db.collection("students").doc(startAfterId).get();
+        if (startDoc.exists) {
+          query = query.startAfter(startDoc);
+        } else {
+          console.warn("listStudents: invalid startAfter token, starting from first page");
+        }
       } catch (e) {
-        // ignore invalid startAfter, fallback to first page
-        console.warn('Invalid startAfter token, serving first page', e);
+        console.warn("listStudents: error resolving startAfter token", e?.message);
       }
     }
 
-    const snapshot = await q.get();
-    if (snapshot.empty) return res.json({ success: true, data: [], nextPageToken: null });
+    // Fetch one extra to detect hasMore
+    const snapshot = await query.limit(limit + 1).get();
 
-    const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const lastDoc = snapshot.docs[snapshot.docs.length - 1];
-    // return a nextPageToken (doc id) the client can use as ?startAfter=<token>
-    return res.json({ success: true, data: students, nextPageToken: lastDoc ? lastDoc.id : null });
+    if (snapshot.empty) {
+      return res.json({
+        success: true,
+        data: [],
+        count: 0,
+        nextPageToken: null,
+        hasMore: false
+      });
+    }
+
+    const docs = snapshot.docs;
+    const hasMore = docs.length > limit;
+    const pageDocs = hasMore ? docs.slice(0, limit) : docs;
+    const students = pageDocs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    const lastDoc = pageDocs[pageDocs.length - 1];
+    const nextPageToken = hasMore && lastDoc ? lastDoc.id : null;
+
+    console.debug('listStudents:', {
+      pageSize: limit,
+      returnedCount: students.length,
+      hasMore,
+      nextPageToken: nextPageToken ? '(provided)' : null
+    });
+
+    return res.json({
+      success: true,
+      data: students,
+      count: students.length,
+      nextPageToken,
+      hasMore
+    });
   } catch (err) {
-    console.error(err);
+    console.error('listStudents error:', err);
     return res.status(500).json({ error: err.message });
   }
 }
