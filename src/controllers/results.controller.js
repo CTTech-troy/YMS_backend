@@ -27,7 +27,7 @@ export const createResult = async (req, res) => {
     }
 
     // declare vars to collect student info
-    let apiStudentName = null;
+    let apiStudentName = null; 
     let apiStudentUid = null;
     let apiStudentClass = null;
 

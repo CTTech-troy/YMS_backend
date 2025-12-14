@@ -25,22 +25,14 @@ app.use(express.urlencoded({ limit: '300mb', extended: true }));
 // Root route
 app.get("/", (req, res) => {
  res.send(`
-    <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Server Status</title>
-        <!-- Tailwind CDN -->
-        <script src="https://cdn.tailwindcss.com"></script>
-      </head>
+   
       <body class="flex items-center justify-center h-screen bg-gradient-to-br from-indigo-700 to-blue-500 text-white text-center">
         <div class="bg-white/10 p-8 rounded-2xl shadow-2xl backdrop-blur-md max-w-sm w-full">
           <h1 class="text-3xl font-bold mb-3">✅ Server is Running</h1>
           <p class="text-lg opacity-90">Listening on port <span class="font-semibold">${PORT}</span></p>
         </div>
       </body>
-    </html>
+      
   `);
 });
 
