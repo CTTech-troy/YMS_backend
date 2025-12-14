@@ -1,12 +1,9 @@
 import cors from "cors";
 
 const DEFAULT_ORIGINS = [
-  "http://localhost:5174",      // vite dev
+  "https://portal.yetlandgroupofschool.com.ng",
+  "http://localhost:5174",      
   "http://localhost:5173",
-  "http://localhost:5000",
-  "https://ymsdashboard.netlify.app",
-  "https://portal.yetlandgroupofschool.com.ng ",
-  
 ];
 
 
@@ -15,6 +12,7 @@ function parseEnvOrigins() {
   if (!raw) return DEFAULT_ORIGINS;
   return raw.split(",").map(s => s.trim()).filter(Boolean);
 }
+
 
 export default function createCorsMiddleware() {
   const allowed = parseEnvOrigins();
