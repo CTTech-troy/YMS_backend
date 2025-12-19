@@ -8,6 +8,8 @@ export const createResult = async (req, res) => {
       studentId,
       studentUid,
       studentName,
+      // `class` is a reserved word; capture it as `reqClass` to avoid syntax errors
+      class: reqClass,
       picture,
       session,
       term,
@@ -73,7 +75,8 @@ export const createResult = async (req, res) => {
     // ========================================
     const finalStudentName = apiStudentName || resolvedStudentName || null;
     const finalStudentUid = apiStudentUid || resolvedStudentUid || null;
-    const finalStudentClass = apiStudentClass || null;
+    // Prefer data from Firestore/API, but fall back to the request body `class` when provided
+    const finalStudentClass = apiStudentClass || reqClass || null;
 
     // ========================================
     // BUILD RESULT DOCUMENT

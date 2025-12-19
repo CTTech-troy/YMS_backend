@@ -4,7 +4,8 @@ import * as studentCtrl from "../controllers/student.controller.js";
 const router = express.Router();
 
 router.post("/", studentCtrl.createStudent);
-router.get("/", studentCtrl.listStudents);
+router.get("/", studentCtrl.listStudents);        // paginated (admin list/search)
+router.get("/all", studentCtrl.listAllStudents);  // unpaginated (dropdowns)
 router.get("/:id", studentCtrl.getStudent);
 router.post("/:id/results", studentCtrl.addResult);
 router.put("/:id", studentCtrl.updateStudent);

@@ -196,9 +196,17 @@ async function listStudents(req, res) {
     // default page size 10
     const limit = Math.min(Number(req.query.limit) || 10, 100);
     const startAfterId = req.query.startAfter ? String(req.query.startAfter) : null;
+    const classFilter = req.query.class ? String(req.query.class).trim().toLowerCase() : null;
 
     // build base query ordered by creation date
-    let query = db.collection("students").orderBy("createdAt", "desc");
+    let query = db.collection("students");
+    
+    // Apply class filter server-side to reduce reads
+    if (classFilter) {
+      query = query.where("class", "==", classFilter);
+    }
+    
+    query = query.orderBy("createdAt", "desc");
 
     // ========================================
     // APPLY CURSOR FOR PAGINATION
@@ -241,6 +249,7 @@ async function listStudents(req, res) {
     const nextPageToken = hasMore && lastDoc ? lastDoc.id : null;
 
     console.debug('listStudents:', {
+      classFilter: classFilter || '(none)',
       pageSize: limit,
       returnedCount: students.length,
       hasMore,
@@ -256,6 +265,64 @@ async function listStudents(req, res) {
     });
   } catch (err) {
     console.error('listStudents error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+/**
+ * List All Students (unpaginated)
+ * Used for dropdowns, bulk operations, exports
+ * Query params:
+ *   - class (optional): filter by class
+ * 
+ * Returns array of all students (no pagination)
+ */
+async function listAllStudents(req, res) {
+  try {
+    // Enforce a paginated response so callers cannot retrieve the entire
+    // collection in one request. Default `limit` is 100, maximum allowed is 1000.
+    const requestedLimit = Number(req.query.limit) || 100;
+    const limit = Math.min(Math.max(requestedLimit, 1), 1000);
+    const startAfterId = req.query.startAfter ? String(req.query.startAfter) : null;
+    const classFilter = req.query.class ? String(req.query.class).trim() : null;
+
+    // Build query. If a class filter is provided, apply it server-side to avoid
+    // loading all documents then filtering in memory. Note: this requires exact
+    // matches from the frontend (case-sensitive) unless you maintain a
+    // normalized class field in the documents.
+    let query = db.collection('students');
+    if (classFilter) query = query.where('class', '==', classFilter);
+    query = query.orderBy('createdAt', 'desc');
+
+    // Apply cursor pagination if provided
+    if (startAfterId) {
+      try {
+        const startDoc = await db.collection('students').doc(startAfterId).get();
+        if (startDoc.exists) query = query.startAfter(startDoc);
+        else console.warn('listAllStudents: invalid startAfter token, ignoring');
+      } catch (e) {
+        console.warn('listAllStudents: error resolving startAfter token', e?.message);
+      }
+    }
+
+    // Fetch one extra to detect hasMore
+    const snapshot = await query.limit(limit + 1).get();
+    if (snapshot.empty) {
+      return res.json({ success: true, data: [], count: 0, nextPageToken: null, hasMore: false });
+    }
+
+    const docs = snapshot.docs;
+    const hasMore = docs.length > limit;
+    const pageDocs = hasMore ? docs.slice(0, limit) : docs;
+    const students = pageDocs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const lastDoc = pageDocs[pageDocs.length - 1];
+    const nextPageToken = hasMore && lastDoc ? lastDoc.id : null;
+
+    console.debug('listAllStudents:', { requestedLimit, returned: students.length, hasMore });
+
+    return res.json({ success: true, data: students, count: students.length, nextPageToken, hasMore });
+  } catch (err) {
+    console.error('listAllStudents error:', err);
     return res.status(500).json({ error: err.message });
   }
 }
@@ -474,4 +541,4 @@ async function promoteStudents(req, res) {
 }
 
 // ✅ Use ESM export instead of module.exports
-export { createStudent, getStudent, listStudents, addResult, updateStudent, deleteStudent, promoteStudents };
+export { createStudent, getStudent, listStudents, listAllStudents, addResult, updateStudent, deleteStudent, promoteStudents };

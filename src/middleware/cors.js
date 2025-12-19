@@ -18,7 +18,6 @@ export default function createCorsMiddleware() {
   const allowed = parseEnvOrigins();
   return cors({
     origin: (origin, cb) => {
-      // allow requests with no origin (mobile apps, curl, server-to-server)
       if (!origin) return cb(null, true);
       if (allowed.includes(origin)) return cb(null, true);
       return cb(new Error(`CORS blocked: origin ${origin} not allowed`), false);
