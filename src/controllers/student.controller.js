@@ -274,6 +274,7 @@ async function listStudents(req, res) {
  * Used for dropdowns, bulk operations, exports
  * Query params:
  *   - class (optional): filter by class
+ *   - uid (optional): filter by student UID
  * 
  * Returns array of all students (no pagination)
  */
@@ -285,6 +286,7 @@ async function listAllStudents(req, res) {
     const limit = Math.min(Math.max(requestedLimit, 1), 1000);
     const startAfterId = req.query.startAfter ? String(req.query.startAfter) : null;
     const classFilter = req.query.class ? String(req.query.class).trim() : null;
+    const uidFilter = req.query.uid ? String(req.query.uid).trim() : null;
 
     // Build query. If a class filter is provided, apply it server-side to avoid
     // loading all documents then filtering in memory. Note: this requires exact
@@ -292,6 +294,7 @@ async function listAllStudents(req, res) {
     // normalized class field in the documents.
     let query = db.collection('students');
     if (classFilter) query = query.where('class', '==', classFilter);
+    if (uidFilter) query = query.where('uid', '==', uidFilter);
     query = query.orderBy('createdAt', 'desc');
 
     // Apply cursor pagination if provided

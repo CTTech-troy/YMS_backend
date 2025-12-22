@@ -79,6 +79,88 @@ export const createResult = async (req, res) => {
     const finalStudentClass = apiStudentClass || reqClass || null;
 
     // ========================================
+    // CALCULATE TOTAL PERCENTAGE AND ENRICH SUBJECTS
+    // ========================================
+    let totalPercentage = 0;
+    const enrichedSubjects = [];
+    const subjectApiBase = process.env.SUBJECT_API_URL || 'https://yms-backend-a2x4.onrender.com/api/subjects';
+    const maxScorePerSubject = 100; // Total possible score per subject
+    
+    try {
+      // Fetch all subjects to build a map
+      const subjectsResp = await fetch(subjectApiBase);
+      if (subjectsResp.ok) {
+        const subjectsData = await subjectsResp.json();
+        const subjectsList = Array.isArray(subjectsData) ? subjectsData : (subjectsData.data || []);
+        const subjectMap = {};
+        subjectsList.forEach(subj => {
+          subjectMap[subj.id] = subj.name;
+          subjectMap[subj.code] = subj.name; // Also map by code for flexibility
+        });
+        
+        // Enrich each subject with its name and calculate percentage
+        let totalScore = 0;
+        subjects.forEach(subj => {
+          const subjectCode = subj.code || subj.id || subj.subjectCode;
+          const subjectName = subj.name || subjectMap[subjectCode] || 'Unknown Subject';
+          
+          // Calculate subject percentage: total out of 100
+          const subjectTotal = subj.total || 0;
+          const subjectPercentage = (subjectTotal / maxScorePerSubject) * 100;
+          
+          totalScore += subjectTotal;
+          
+          enrichedSubjects.push({
+            ...subj,
+            name: subjectName,
+            code: subjectCode,
+            percentage: Math.round(subjectPercentage * 10) / 10 // Round to 1 decimal place
+          });
+        });
+        
+        // Calculate overall percentage: Total Mark obtained ÷ total Marks obtainable
+        const totalMarksObtainable = subjects.length * maxScorePerSubject; // Total possible marks across all subjects
+        totalPercentage = totalMarksObtainable > 0 
+          ? Math.round((totalScore / totalMarksObtainable) * 100 * 10) / 10 
+          : 0; // Round to 1 decimal place
+      } else {
+        // Fallback: use subjects as-is if API fails
+        let totalScore = 0;
+        subjects.forEach(subj => {
+          const subjectTotal = subj.total || 0;
+          const subjectPercentage = (subjectTotal / maxScorePerSubject) * 100;
+          totalScore += subjectTotal;
+          enrichedSubjects.push({
+            ...subj,
+            percentage: Math.round(subjectPercentage * 10) / 10
+          });
+        });
+        const totalMarksObtainable = subjects.length * maxScorePerSubject;
+        totalPercentage = totalMarksObtainable > 0 
+          ? Math.round((totalScore / totalMarksObtainable) * 100 * 10) / 10 
+          : 0;
+        console.warn('createResult: failed to fetch subjects from API, using provided data');
+      }
+    } catch (fetchErr) {
+      // Fallback: use subjects as-is if fetch fails
+      let totalScore = 0;
+      subjects.forEach(subj => {
+        const subjectTotal = subj.total || 0;
+        const subjectPercentage = (subjectTotal / maxScorePerSubject) * 100;
+        totalScore += subjectTotal;
+        enrichedSubjects.push({
+          ...subj,
+          percentage: Math.round(subjectPercentage * 10) / 10
+        });
+      });
+      const totalMarksObtainable = subjects.length * maxScorePerSubject;
+      totalPercentage = totalMarksObtainable > 0 
+        ? Math.round((totalScore / totalMarksObtainable) * 100 * 10) / 10 
+        : 0;
+      console.warn('createResult: failed to enrich subjects:', fetchErr?.message || fetchErr);
+    }
+
+    // ========================================
     // BUILD RESULT DOCUMENT
     // ========================================
     const resultData = {
@@ -89,7 +171,8 @@ export const createResult = async (req, res) => {
       ...(picture ? { picture: String(picture) } : {}),
       session,
       term,
-      subjects,
+      subjects: enrichedSubjects,
+      totalPercentage,
       teacherComment,
       principalComment,
       teacherUid,
@@ -157,12 +240,19 @@ export const createResult = async (req, res) => {
 export const getAllResults = async (req, res) => {
   try {
     const publishedQuery = (req.query.published || '').toLowerCase(); // 'yes' | 'no' | 'all' | ''
+    const uidQuery = req.query.uid ? (req.query.uid || '').trim() : null; // Filter by student UID if provided
     let collectionRef = db.collection('results');
 
+    // Apply published filter if specified
     if (publishedQuery === 'yes') {
       collectionRef = collectionRef.where('published', '==', 'yes');
     } else if (publishedQuery === 'no') {
       collectionRef = collectionRef.where('published', '==', 'no');
+    }
+
+    // Apply UID filter if provided
+    if (uidQuery) {
+      collectionRef = collectionRef.where('studentUid', '==', uidQuery);
     }
 
     const snapshot = await collectionRef.get();
