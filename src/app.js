@@ -1,37 +1,37 @@
-// // app.js
-// // import express from 'express';
-// // import bodyParser from 'body-parser';
-// // import cors from 'cors';
-// // import morgan from 'morgan';
+import express from 'express';
+import createCorsMiddleware from './middlewares/cors.middleware.js';
+import { errorHandler, notFoundHandler } from './middlewares/error.middleware.js';
+import { registerApiRoutes } from './routes/index.js';
+import { PORT } from './config/env.js';
 
-// // Import routes (ensure these files exist and use ESM exports)
-// // import teacherRoutes from './routes/teacher.routes.js';
+export function createApp() {
+  const app = express();
 
-// const app = express();
+  app.use(createCorsMiddleware());
+  app.use(express.json({ limit: '500mb' }));
+  app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
-// // Middleware: increase limits to accept base64 images from frontend
-// app.use(cors());
-// app.use(bodyParser.json({ limit: '100mb' }));
-// app.use(bodyParser.urlencoded({ extended: true, limit: '100mb' }));
-// app.use(morgan('dev'));
+  app.get('/', (req, res) => {
+    res.type('html').send(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>YMS API</title></head>
+<body style="margin:0;font-family:system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#4338ca 0%,#2563eb 100%);color:#fff;text-align:center;">
+  <div style="background:rgba(255,255,255,.12);padding:2rem;border-radius:1rem;max-width:24rem;backdrop-filter:blur(8px);">
+    <h1 style="margin:0 0 .5rem;font-size:1.5rem;">Server is running</h1>
+    <p style="margin:0;opacity:.95;">Listening on port <strong>${PORT}</strong></p>
+  </div>
+</body>
+</html>`);
+  });
 
-// // Routes
-// // 
-// app.use('/api/teachers', teacherRoutes);
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok', uptime: process.uptime() });
+  });
 
-// // Health
-// app.get('/health', (req, res) => res.json({ ok: true }));
+  registerApiRoutes(app);
 
-// // Error handling middleware (handle PayloadTooLarge)
-// app.use((err, req, res, next) => {
-//   if (err && (err.type === 'entity.too.large' || err.status === 413)) {
-//     return res.status(413).json({ error: 'Payload too large. Reduce payload size or increase server limit.' });
-//   }
-//   // eslint-disable-next-line no-console
-//   console.error(err);
-//   res.status(err?.status || 500).json({
-//     message: err?.message || 'Internal Server Error',
-//   });
-// });
+  app.use(notFoundHandler);
+  app.use(errorHandler);
 
-// export default app;
+  return app;
+}

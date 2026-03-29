@@ -1,4 +1,5 @@
 // backend/src/controllers/student.controller.js
+import bcrypt from "bcryptjs";
 import { db, admin } from "../config/firebase.js";
 import { normalizeGender, normalizeGuardians } from "../models/student.js";
 
@@ -172,7 +173,9 @@ async function getStudent(req, res) {
     const { id } = req.params;
     const doc = await db.collection("students").doc(id).get();
     if (!doc.exists) return res.status(404).json({ error: "Student not found" });
-    return res.json({ success: true, data: { id: doc.id, ...doc.data() } });
+    const raw = doc.data() || {};
+    const { passwordHash: _ph, ...safe } = raw;
+    return res.json({ success: true, data: { id: doc.id, ...safe } });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });
@@ -224,8 +227,32 @@ async function listStudents(req, res) {
       }
     }
 
-    // Fetch one extra to detect hasMore
-    const snapshot = await query.limit(limit + 1).get();
+    // Fetch one extra to detect hasMore. Firestore may require a composite index
+    // when combining `where('class', '==', ...)` and `orderBy('createdAt')`.
+    // If that happens we'll retry without `orderBy` as a graceful fallback so
+    // the API doesn't return a 500 to the frontend.
+    let snapshot;
+    try {
+      snapshot = await query.limit(limit + 1).get();
+    } catch (qerr) {
+      console.error('listStudents query error (first attempt):', qerr?.code || qerr?.message || qerr);
+      // If the error mentions an index requirement, retry without orderBy
+      const msg = String(qerr?.message || qerr || '').toLowerCase();
+      if (msg.includes('index') || msg.includes('requires an index')) {
+        console.warn('listStudents: Firestore index required for class+createdAt; retrying without orderBy');
+        // rebuild base query without orderBy to avoid composite index requirement
+        try {
+          let fallbackQuery = db.collection('students');
+          if (classFilter) fallbackQuery = fallbackQuery.where('class', '==', classFilter);
+          snapshot = await fallbackQuery.limit(limit + 1).get();
+        } catch (fallbackErr) {
+          console.error('listStudents fallback query error:', fallbackErr);
+          throw fallbackErr;
+        }
+      } else {
+        throw qerr;
+      }
+    }
 
     if (snapshot.empty) {
       return res.json({
@@ -240,10 +267,11 @@ async function listStudents(req, res) {
     const docs = snapshot.docs;
     const hasMore = docs.length > limit;
     const pageDocs = hasMore ? docs.slice(0, limit) : docs;
-    const students = pageDocs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const students = pageDocs.map((doc) => {
+      const raw = doc.data() || {};
+      const { passwordHash: _p, ...safe } = raw;
+      return { id: doc.id, ...safe };
+    });
 
     const lastDoc = pageDocs[pageDocs.length - 1];
     const nextPageToken = hasMore && lastDoc ? lastDoc.id : null;
@@ -317,7 +345,11 @@ async function listAllStudents(req, res) {
     const docs = snapshot.docs;
     const hasMore = docs.length > limit;
     const pageDocs = hasMore ? docs.slice(0, limit) : docs;
-    const students = pageDocs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const students = pageDocs.map((doc) => {
+      const raw = doc.data() || {};
+      const { passwordHash: _p, ...safe } = raw;
+      return { id: doc.id, ...safe };
+    });
     const lastDoc = pageDocs[pageDocs.length - 1];
     const nextPageToken = hasMore && lastDoc ? lastDoc.id : null;
 
@@ -426,6 +458,10 @@ async function updateStudent(req, res) {
       body.picture = pic ? pic : ""; // store object or empty string
     }
 
+    const newPassword = body.newPassword ?? body.password;
+    const passwordToSet =
+      typeof newPassword === "string" && newPassword.trim() !== "" ? newPassword.trim() : null;
+
     const allowed = [
       "name","linNumber","dob","gender","class","guardians","address",
       "stateOfOrigin","lga","picture","bloodGroup","allergies","medicalConditions",
@@ -435,11 +471,20 @@ async function updateStudent(req, res) {
     for (const k of allowed) {
       if (body[k] !== undefined) updateData[k] = body[k];
     }
+
+    if (passwordToSet) {
+      const salt = await bcrypt.genSalt(10);
+      updateData.passwordHash = await bcrypt.hash(passwordToSet, salt);
+      updateData.passwordSetAt = new Date().toISOString();
+    }
+
     updateData.updatedAt = admin.firestore.FieldValue.serverTimestamp();
 
     await docRef.update(updateData);
     const updatedSnap = await docRef.get();
-    return res.status(200).json({ success: true, data: { id: updatedSnap.id, ...updatedSnap.data() } });
+    const raw = updatedSnap.data() || {};
+    const { passwordHash: _ph, ...safe } = raw;
+    return res.status(200).json({ success: true, data: { id: updatedSnap.id, ...safe } });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: err.message });

@@ -1,10 +1,14 @@
-const express = require('express');
-const router = express.Router();
-const reportsController = require('../controllers/reports.controller');
+import { Router } from 'express';
+import {
+  getAttendanceReport,
+  getResultsReport,
+  getSummaryReport
+} from '../controllers/reports.controller.js';
 
-// Define routes for reports
-router.get('/attendance', reportsController.getAttendanceReport);
-router.get('/results', reportsController.getResultsReport);
-router.get('/summary', reportsController.getSummaryReport);
+const router = Router();
 
-module.exports = router;
+router.get('/attendance', getAttendanceReport);
+router.get('/results', getResultsReport);
+router.get('/summary', getSummaryReport);
+
+export default router;

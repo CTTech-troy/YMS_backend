@@ -30,6 +30,9 @@ export const generateScratchCards = async (req, res) => {
         generatedAt: new Date().toISOString(),
         usedAt: null,
         usedBy: null,
+        usedByStudentUid: null,
+        usedByStudentDocId: null,
+        expiresAt: null
       };
 
       batch.set(docRef, card);

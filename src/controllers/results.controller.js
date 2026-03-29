@@ -1,6 +1,45 @@
 import { db } from '../firebase.js';
 // removed axios import to use global fetch instead
 
+function normalizeSessionKey(s) {
+  return (s ?? '').toString().trim().replace(/\s+/g, '');
+}
+
+function normalizeTermKey(t) {
+  if (t == null || t === '') return '';
+  const raw = String(t).trim().toLowerCase().replace(/\s+/g, ' ');
+  if (raw.includes('first') || raw === '1' || raw === '1st') return 'first term';
+  if (raw.includes('second') || raw === '2' || raw === '2nd') return 'second term';
+  if (raw.includes('third') || raw === '3' || raw === '3rd') return 'third term';
+  return raw;
+}
+
+async function findConflictingResultDoc(studentId, studentUid, session, term) {
+  const snaps = [];
+  if (studentId) {
+    snaps.push(db.collection('results').where('studentId', '==', String(studentId)).get());
+  }
+  if (studentUid && String(studentUid) !== String(studentId)) {
+    snaps.push(db.collection('results').where('studentUid', '==', String(studentUid)).get());
+  }
+  const settled = await Promise.all(snaps);
+  const seen = new Set();
+  for (const snap of settled) {
+    for (const doc of snap.docs) {
+      if (seen.has(doc.id)) continue;
+      seen.add(doc.id);
+      const d = doc.data() || {};
+      if (
+        normalizeSessionKey(d.session) === normalizeSessionKey(session) &&
+        normalizeTermKey(d.term) === normalizeTermKey(term)
+      ) {
+        return doc;
+      }
+    }
+  }
+  return null;
+}
+
 export const createResult = async (req, res) => {
   try {
     // accept common property names from the client
@@ -26,6 +65,15 @@ export const createResult = async (req, res) => {
 
     if (!finalStudentId || !teacherUid || !session || !term || !Array.isArray(subjects) || subjects.length === 0) {
       return res.status(400).json({ message: 'Missing required fields: studentId, teacherUid, session, term, subjects' });
+    }
+
+    const resolvedStudentUidForDup = studentUid || req.body.studentuid || req.body.Uid || null;
+    const conflict = await findConflictingResultDoc(finalStudentId, resolvedStudentUidForDup, session, term);
+    if (conflict) {
+      return res.status(409).json({
+        message: 'A result already exists for this student, session, and term.',
+        existingId: conflict.id
+      });
     }
 
     // declare vars to collect student info
