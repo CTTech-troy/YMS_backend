@@ -58,4 +58,4 @@ export async function lookupStudent(req, res) {
   }
 }
 
-export { findStudentDocByNumber, toPublicStudent };
+export { findStudentDocByNumber };
