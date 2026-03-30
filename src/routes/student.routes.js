@@ -5,8 +5,9 @@ import { lookupStudent } from "../controllers/studentPortal.controller.js";
 const router = express.Router();
 
 router.post("/", studentCtrl.createStudent);
-router.get("/", studentCtrl.listStudents);        // paginated (admin list/search)
-router.get("/all", studentCtrl.listAllStudents);  // unpaginated (dropdowns)
+router.get("/", studentCtrl.listStudents);
+router.get("/all", studentCtrl.listAllStudents);
+router.get("/count", studentCtrl.getStudentsCount);
 router.get("/lookup", lookupStudent);
 router.get("/:id", studentCtrl.getStudent);
 router.post("/:id/results", studentCtrl.addResult);

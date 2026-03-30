@@ -7,7 +7,11 @@ async function getPortalMode() {
   const d = snap.exists ? snap.data() : {};
   const mode = d.studentResultAccessMode || 'both';
   const scratchOn = d.scratchCardLoginEnabled !== false;
-  return { mode, scratchOn };
+  const generalPasswordHash =
+    d.studentPortalPasswordHash && String(d.studentPortalPasswordHash).trim()
+      ? String(d.studentPortalPasswordHash)
+      : null;
+  return { mode, scratchOn, generalPasswordHash };
 }
 
 export async function loginWithPassword(req, res) {
@@ -17,7 +21,7 @@ export async function loginWithPassword(req, res) {
       return res.status(400).json({ success: false, message: 'Student number and password are required' });
     }
 
-    const { mode } = await getPortalMode();
+    const { mode, generalPasswordHash } = await getPortalMode();
     if (mode === 'scratch_only') {
       return res.status(403).json({ success: false, message: 'Password login is disabled' });
     }
@@ -28,15 +32,22 @@ export async function loginWithPassword(req, res) {
     }
 
     const data = doc.data() || {};
-    const hash = data.passwordHash;
-    if (!hash) {
+    const studentHash = data.passwordHash && String(data.passwordHash).trim() ? String(data.passwordHash) : null;
+
+    if (!generalPasswordHash && !studentHash) {
       return res.status(403).json({
         success: false,
-        message: 'No password set. Contact the school administrator.'
+        message: 'No portal password has been set by the school yet. Contact the administrator.'
       });
     }
 
-    const ok = await bcrypt.compare(String(password), String(hash));
+    let ok = false;
+    if (generalPasswordHash) {
+      ok = await bcrypt.compare(String(password), generalPasswordHash);
+    }
+    if (!ok && studentHash) {
+      ok = await bcrypt.compare(String(password), studentHash);
+    }
     if (!ok) {
       return res.status(401).json({ success: false, message: 'Incorrect password' });
     }

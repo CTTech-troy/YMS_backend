@@ -183,9 +183,30 @@ async function getStudent(req, res) {
 }
 
 /**
- * List Students (paginated 10 per page by default)
+ * Exact document count in Firestore (aggregate query — does not load all docs).
+ * GET /api/students/count
+ * Query: class (optional) — same filter as list when narrowing by class
+ */
+async function getStudentsCount(req, res) {
+  try {
+    const classFilter = req.query.class ? String(req.query.class).trim() : null;
+    let q = db.collection("students");
+    if (classFilter) {
+      q = q.where("class", "==", classFilter);
+    }
+    const agg = await q.count().get();
+    const total = agg.data().count;
+    return res.json({ success: true, total });
+  } catch (err) {
+    console.error("getStudentsCount", err);
+    return res.status(500).json({ error: err.message || "Count failed" });
+  }
+}
+
+/**
+ * List Students (paginated; default page size 100, max 100 per request)
  * Query params:
- *   - limit (optional, max 100)
+ *   - limit (optional, default 100, max 100) — use e.g. limit=10 for small pages
  *   - startAfter (optional, doc id to start after for cursor pagination)
  * 
  * Returns:
@@ -196,8 +217,7 @@ async function getStudent(req, res) {
  */
 async function listStudents(req, res) {
   try {
-    // default page size 10
-    const limit = Math.min(Number(req.query.limit) || 10, 100);
+    const limit = Math.min(Number(req.query.limit) || 100, 100);
     const startAfterId = req.query.startAfter ? String(req.query.startAfter) : null;
     const classFilter = req.query.class ? String(req.query.class).trim().toLowerCase() : null;
 
@@ -589,4 +609,14 @@ async function promoteStudents(req, res) {
 }
 
 // ✅ Use ESM export instead of module.exports
-export { createStudent, getStudent, listStudents, listAllStudents, addResult, updateStudent, deleteStudent, promoteStudents };
+export {
+  createStudent,
+  getStudent,
+  getStudentsCount,
+  listStudents,
+  listAllStudents,
+  addResult,
+  updateStudent,
+  deleteStudent,
+  promoteStudents
+};
