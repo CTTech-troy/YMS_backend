@@ -1,0 +1,21 @@
+# Render Blueprint (optional): connect repo in Render → New → Blueprint → select this file.
+# Set all env vars in the Render dashboard (never commit real secrets).
+
+services:
+  - type: web
+    name: yms-backend
+    runtime: node
+    plan: starter
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: FIREBASE_API_KEY
+        sync: false
