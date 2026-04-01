@@ -1,7 +1,7 @@
 // backend/src/controllers/teacher.controller.js
 import { TeacherModel } from "../models/teacher.js";
 import sharp from "sharp";
-import admin from 'firebase-admin';
+import { admin } from "../config/firebase.js";
 
 function generateTeacherUID(existingUIDs = []) {
   const yearShort = String(new Date().getFullYear()).slice(-2);
@@ -15,6 +15,14 @@ function generateTeacherUID(existingUIDs = []) {
   const next = (seqs.length ? Math.max(...seqs) : 0) + 1;
   const seqStr = String(next).padStart(2, "0");
   return `YMS-S-${yearShort}${seqStr}`;
+}
+
+function normalizeClassName(value) {
+  if (!value) return "";
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ""); // collapse spaces so "JSS 1" and "jss1" match
 }
 
 export const TeacherController = {
@@ -189,6 +197,80 @@ export const TeacherController = {
     } catch (error) {
       console.error("Error fetching teachers:", error);
       res.status(500).json({ error: "Failed to fetch teachers" });
+    }
+  },
+
+  // Return students for a given teacher's assigned class
+  async getTeacherStudents(req, res) {
+    try {
+      const { id } = req.params;
+      const teachers = (await TeacherModel.getAll()) || [];
+      const teacher = teachers.find((t) => {
+        const tid = String(id);
+        return (
+          String(t.id) === tid ||
+          String(t._id) === tid ||
+          String(t.uid || "").toLowerCase() === tid.toLowerCase() ||
+          String(t.staffId || "").toLowerCase() === tid.toLowerCase()
+        );
+      });
+
+      if (!teacher) {
+        return res.status(404).json({ error: "Teacher not found" });
+      }
+
+      const rawTeacherClass =
+        teacher.assignedClass ||
+        teacher.classAssigned ||
+        teacher.class ||
+        "";
+      const normalizedTeacherClass = normalizeClassName(rawTeacherClass);
+
+      console.log("getTeacherStudents: raw teacher class =", rawTeacherClass);
+      console.log("getTeacherStudents: normalized teacher class =", normalizedTeacherClass);
+
+      if (!normalizedTeacherClass) {
+        return res.status(200).json({
+          teacherId: teacher.id || teacher._id,
+          assignedClass: rawTeacherClass || null,
+          students: [],
+        });
+      }
+
+      // Fetch students from Firestore and filter by normalized class
+      const db = admin.firestore();
+      const snap = await db.collection("students").get();
+      const students = [];
+      const normalizedClasses = [];
+
+      snap.forEach((doc) => {
+        const data = doc.data() || {};
+        const rawStudentClass =
+          data.class ||
+          data.studentClass ||
+          data.className ||
+          data.classroom ||
+          "";
+        const normalizedStudentClass = normalizeClassName(rawStudentClass);
+
+        normalizedClasses.push(normalizedStudentClass);
+
+        if (normalizedStudentClass === normalizedTeacherClass) {
+          students.push({ id: doc.id, ...data });
+        }
+      });
+
+      console.log("getTeacherStudents: raw student classes sample =", normalizedClasses.slice(0, 10));
+      console.log("getTeacherStudents: filtered student count =", students.length);
+
+      return res.status(200).json({
+        teacherId: teacher.id || teacher._id,
+        assignedClass: rawTeacherClass,
+        students,
+      });
+    } catch (error) {
+      console.error("getTeacherStudents error:", error);
+      return res.status(500).json({ error: "Failed to fetch teacher students", message: error.message });
     }
   },
 

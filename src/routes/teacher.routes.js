@@ -9,7 +9,8 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 // Add GET by id/uid route so frontend can request /api/teachers/:idOrUid
 router.post("/", upload.single("picture"), TeacherController.createTeacher);
 router.get("/", TeacherController.getAllTeachers);
-router.get("/:id", TeacherController.getTeacher); // <-- new
+router.get("/:id", TeacherController.getTeacher);
+router.get("/:id/students", TeacherController.getTeacherStudents);
 router.put("/:id", upload.single("picture"), TeacherController.updateTeacher);
 router.delete("/:id", TeacherController.deleteTeacher);
 

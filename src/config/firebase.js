@@ -1,28 +1,107 @@
-// backend/src/config/firebase.js
 import admin from "firebase-admin";
 import dotenv from "dotenv";
-dotenv.config();
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 
-if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-  throw new Error("Missing FIREBASE_SERVICE_ACCOUNT in .env");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const envPaths = [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(__dirname, "../../.env"),
+  path.resolve(__dirname, "../../../.env"),
+];
+
+let loadedEnvPath = null;
+
+for (const envPath of envPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath, override: true });
+    loadedEnvPath = envPath;
+    break;
+  }
 }
 
-let serviceAccount;
-try {
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-} catch (err) {
-  throw new Error("Invalid FIREBASE_SERVICE_ACCOUNT. Must be valid JSON.");
+if (loadedEnvPath) {
+  console.log("Loaded .env from:", loadedEnvPath);
+} else {
+  console.warn("No .env file found in expected locations.");
 }
 
-if (serviceAccount.private_key) {
-  serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
+function getServiceAccountFromEnv() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    if (parsed.private_key) {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+    }
+
+    return parsed;
+  } catch (error) {
+    throw new Error(`Invalid FIREBASE_SERVICE_ACCOUNT JSON: ${error.message}`);
+  }
 }
 
-// Initialize Admin SDK with credential only (no RTDB initialization)
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  // removed databaseURL to avoid RTDB usage
-});
+function getServiceAccountFromFile() {
+  const possibleJsonPaths = [
+    path.resolve(process.cwd(), "src/config/YMS_school.json"),
+    path.resolve(__dirname, "./YMS_school.json"),
+  ];
+
+  for (const jsonPath of possibleJsonPaths) {
+    if (fs.existsSync(jsonPath)) {
+      try {
+        const raw = fs.readFileSync(jsonPath, "utf-8");
+        const parsed = JSON.parse(raw);
+
+        if (parsed.private_key) {
+          parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+        }
+
+        console.log("Loaded Firebase service account from:", jsonPath);
+        return parsed;
+      } catch (error) {
+        throw new Error(`Failed to read Firebase JSON file at ${jsonPath}: ${error.message}`);
+      }
+    }
+  }
+
+  return null;
+}
+
+let serviceAccount = getServiceAccountFromEnv();
+
+if (!serviceAccount) {
+  serviceAccount = getServiceAccountFromFile();
+}
+
+if (!serviceAccount) {
+  throw new Error(
+    "Firebase credentials not found. Add FIREBASE_SERVICE_ACCOUNT to .env or place YMS_school.json inside src/config."
+  );
+}
+
+if (
+  !serviceAccount.project_id ||
+  !serviceAccount.client_email ||
+  !serviceAccount.private_key
+) {
+  throw new Error("Firebase service account is missing required fields.");
+}
+
+console.log("Firebase project:", serviceAccount.project_id);
+console.log("Firebase client email:", serviceAccount.client_email);
+console.log("Private key present:", !!serviceAccount.private_key);
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
 
 const db = admin.firestore();
 const auth = admin.auth();

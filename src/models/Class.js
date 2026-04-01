@@ -1,10 +1,6 @@
-import { firestore } from 'firebase-admin';
+import { db } from '../config/firebase.js';
 
-if (!firestore) {
-  throw new Error('Firestore is not initialized. Make sure backend/src/config/firebase.js is present and initialized.');
-}
-
-const collection = firestore.collection('classes');
+const collection = db.collection('classes');
 
 /**
  * Firestore-backed replacement for the Mongoose Class model.

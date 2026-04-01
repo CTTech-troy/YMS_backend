@@ -101,7 +101,7 @@ export const createResult = async (req, res) => {
     // ========================================
     // FETCH STUDENT DATA FROM STUDENT API (if still missing)
     // ========================================
-    const studentApiBase = process.env.STUDENT_API_URL || 'https://yms-backend-a2x4.onrender.com/api/students';
+    const studentApiBase = process.env.STUDENT_API_URL || 'http://localhost:5000/api/students';
     try {
       const url = `${studentApiBase}/${encodeURIComponent(finalStudentId)}`;
       const resp = await fetch(url);
@@ -131,7 +131,7 @@ export const createResult = async (req, res) => {
     // ========================================
     let totalPercentage = 0;
     const enrichedSubjects = [];
-    const subjectApiBase = process.env.SUBJECT_API_URL || 'https://yms-backend-a2x4.onrender.com/api/subjects';
+    const subjectApiBase = process.env.SUBJECT_API_URL || 'http://localhost:5000/api/subjects';
     const maxScorePerSubject = 100; // Total possible score per subject
     
     try {
@@ -289,7 +289,12 @@ export const getAllResults = async (req, res) => {
   try {
     const publishedQuery = (req.query.published || '').toLowerCase(); // 'yes' | 'no' | 'all' | ''
     const uidQuery = req.query.uid ? (req.query.uid || '').trim() : null; // Filter by student UID if provided
+    const limit = Math.min(Number(req.query.limit) || 40, 200);
     let collectionRef = db.collection('results');
+    const debugFilters = {
+      published: publishedQuery || 'none',
+      uid: uidQuery || 'none',
+    };
 
     // Apply published filter if specified
     if (publishedQuery === 'yes') {
@@ -303,12 +308,22 @@ export const getAllResults = async (req, res) => {
       collectionRef = collectionRef.where('studentUid', '==', uidQuery);
     }
 
-    const snapshot = await collectionRef.get();
+    // Always return newest results first
+    collectionRef = collectionRef.orderBy('createdAt', 'desc');
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('getAllResults: running Firestore query with filters:', debugFilters);
+    }
+
+    const snapshot = await collectionRef.limit(limit).get();
     const results = [];
     snapshot.forEach(doc => results.push({ id: doc.id, ...doc.data() }));
     return res.status(200).json(results);
   } catch (err) {
-    console.error('getAllResults error:', err);
+    console.error('getAllResults Firestore error:', err?.message || err);
+    if (err?.stack) {
+      console.error('getAllResults Firestore stack:', err.stack);
+    }
     return res.status(500).json({ message: err.message || 'Failed to fetch results' });
   }
 };
